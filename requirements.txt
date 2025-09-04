@@ -2,3 +2,4 @@ scapy
 fastapi[standard]
 python-multipart
 random_permutation
+netaddr
