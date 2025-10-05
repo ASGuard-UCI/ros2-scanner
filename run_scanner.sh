@@ -2,4 +2,4 @@
 
 HOME_DIR="/home/fayzah/scapy-rtps-experimentation"
 
-$HOME_DIR/.venv/bin/python3 $HOME_DIR/amplification_vulnerability.py
+$HOME_DIR/.venv/bin/python3 $HOME_DIR/unicast_probing.py

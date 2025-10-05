@@ -1,8 +1,8 @@
 import ipaddress
 import logging
 import os
-import sqlite3
 import time
+from itertools import islice
 from multiprocessing import Pool
 
 import netaddr
@@ -23,7 +23,24 @@ COLLECTOR_IP = os.getenv("COLLECTOR_SERVER_IP", "52.15.115.111")
 
 PORTS_TO_SCAN = [7400, 7410, 7411, 7412]
 
-L3_SOCKET = conf.L3socket()
+# Socket will be initialized per process
+process_socket = None
+
+
+def init_worker():
+    """Initialize the L3 socket for each worker process."""
+    global process_socket
+    process_socket = conf.L3socket()
+    atexit.register(deinit_worker)
+
+
+def deinit_worker():
+    """Close the L3 socket for each worker process"""
+    global process_socket
+    if process_socket:
+        process_socket.close()
+        process_socket = None
+
 
 RTPS_PACKET = RTPS(
     # Using 2.3 for protocol version since ROS 2
@@ -195,15 +212,14 @@ logging.basicConfig(
 
 
 def ip_range():
-    with sqlite3.connect("ips.db") as connection:
-        for ip_int in random_permutation.RandomPermutation(2**32):
-            ip_addr = ipaddress.ip_address(ip_int)
-            if netaddr.IPAddress(ip_int) in BLOCKLIST:
-                continue
-            cursor = connection.execute("SELECT ip FROM ips WHERE ip = ?;", (ip_int,))
-            if cursor.fetchone() is not None:
-                continue
-            yield ip_addr.exploded
+    SCANNED_SO_FAR = 851_777_228
+    for ip_int in islice(
+        random_permutation.RandomPermutation(2**32), SCANNED_SO_FAR, None
+    ):
+        ip_addr = ipaddress.ip_address(ip_int)
+        if netaddr.IPAddress(ip_int) in BLOCKLIST:
+            continue
+        yield ip_addr.exploded
 
 
 def main():
@@ -212,9 +228,9 @@ def main():
     RTPS packets to each IP on the specified ports. The scanned IPs are saved
     to a file.
     """
-    with open("scanned_ips_new2.txt", "a") as scanned_ips_f:
-        with Pool(processes=118) as pool:
-            results = pool.imap_unordered(amplify_ip, ip_range(), chunksize=1000)
+    with open("scanned_ips.txt", "a") as scanned_ips_f:
+        with Pool(processes=100, initializer=init_worker, maxtasksperchild=1000) as pool:
+            results = pool.imap_unordered(amplify_ip, ip_range())
 
             # Need to iterate through results to make sure all processes run
             for ip in results:
@@ -234,10 +250,11 @@ def amplify_ip(ip):
 
 def send_packet(ip, port):
     """
-    Send RTPS packet to the specified IP and port using L3_SOCKET. Using the
-    same socket for sending packets speeds up the process significantly.
+    Send RTPS packet to the specified IP and port using process-specific socket.
+    Using the same socket for sending packets speeds up the process significantly.
     """
-    L3_SOCKET.send(IP(dst=ip) / UDP(sport=33653, dport=port) / RTPS_PACKET)
+    global process_socket
+    process_socket.send(IP(dst=ip) / UDP(sport=33653, dport=port) / RTPS_PACKET)
 
 
 if __name__ == "__main__":
