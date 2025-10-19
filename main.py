@@ -17,7 +17,7 @@ from typing import Annotated
 from fastapi import FastAPI, Form, status
 from fastapi.responses import HTMLResponse
 
-from amplification_vulnerability import amplify_ip, init_worker
+from unicast_probing import amplify_ip, init_worker
 
 app = FastAPI()
 
