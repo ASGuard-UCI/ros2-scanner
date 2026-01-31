@@ -229,7 +229,7 @@ def main():
     to a file.
     """
     with open("scanned_ips.txt", "a") as scanned_ips_f:
-        with Pool(processes=100, initializer=init_worker, maxtasksperchild=1000) as pool:
+        with Pool(initializer=init_worker, maxtasksperchild=1000) as pool:
             results = pool.imap_unordered(amplify_ip, ip_range())
 
             # Need to iterate through results to make sure all processes run
